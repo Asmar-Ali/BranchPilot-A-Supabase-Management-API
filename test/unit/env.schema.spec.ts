@@ -144,11 +144,12 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment(environment)).toThrow()
   })
 
-  it('applies defaults for NODE_ENV, PORT, CORS_ALLOWED_ORIGINS, and the OTel endpoint when omitted', () => {
+  it('applies defaults for NODE_ENV, PORT, CORS_ALLOWED_ORIGINS, Management API base URL, and the OTel endpoint when omitted', () => {
     const environment = validEnvironment()
     delete environment.NODE_ENV
     delete environment.PORT
     delete environment.CORS_ALLOWED_ORIGINS
+    delete environment.SUPABASE_MANAGEMENT_API_BASE_URL
     delete environment.OTEL_EXPORTER_OTLP_ENDPOINT
 
     const configuration = validateEnvironment(environment)
@@ -156,6 +157,7 @@ describe('validateEnvironment', () => {
     expect(configuration.NODE_ENV).toBe('development')
     expect(configuration.PORT).toBe(3000)
     expect(configuration.CORS_ALLOWED_ORIGINS).toEqual(['http://localhost:3000'])
+    expect(configuration.SUPABASE_MANAGEMENT_API_BASE_URL).toBe('https://api.supabase.com')
     expect(configuration.OTEL_EXPORTER_OTLP_ENDPOINT).toBe('http://localhost:4318')
   })
 

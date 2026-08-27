@@ -6,5 +6,6 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     passWithNoTests: false,
+    setupFiles: ['test/setup/environment.ts'],
   },
 })

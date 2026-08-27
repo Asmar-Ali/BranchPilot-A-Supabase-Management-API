@@ -8,6 +8,7 @@ Object.assign(process.env, {
   SUPABASE_MANAGEMENT_OAUTH_CLIENT_ID: 'test-client-id',
   SUPABASE_MANAGEMENT_OAUTH_CLIENT_SECRET: 'test-client-secret',
   SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI: 'http://localhost:3000/v1/integrations/supabase/callback',
+  SUPABASE_MANAGEMENT_API_BASE_URL: 'https://management.example.test',
   SUPABASE_URL: 'https://example.supabase.co',
   SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key',
   SUPABASE_SECRET_KEY: 'test-secret-key',

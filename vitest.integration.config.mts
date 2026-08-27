@@ -5,10 +5,7 @@ export default defineConfig({
     include: ['test/integration/**/*.spec.ts'],
     globals: true,
     environment: 'node',
-    // True until the first Postgres-backed module (OAuth, Phase 2) adds a real
-    // integration test — flip to false alongside that first test, matching
-    // vitest.config.mts and vitest.e2e.config.mts.
-    passWithNoTests: true,
+    passWithNoTests: false,
     setupFiles: ['test/setup/environment.ts'],
   },
 })

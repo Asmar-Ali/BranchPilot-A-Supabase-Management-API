@@ -8,6 +8,7 @@ import { AppModule } from '../../src/app.module'
 import { configureHttpApplication } from '../../src/common/http/configure-http-application'
 import { APP_CONFIG } from '../../src/config/config.module'
 import type { Environment } from '../../src/config/env.schema'
+import { MANAGEMENT_API_CLIENT } from '../../src/management-api/management-api.tokens'
 
 const keyId = 'branchpilot-test-key'
 
@@ -35,6 +36,7 @@ function signedUserToken(privateKey: KeyObject, actorSub: string): string {
 describe('Organizations authentication', () => {
   let app: INestApplication
   let privateKey: KeyObject
+  const organizations = [{ id: 'org-1', name: 'Acme', slug: 'acme' }]
 
   beforeAll(async () => {
     const keyPair = generateKeyPairSync('rsa', { modulusLength: 2048 })
@@ -46,7 +48,10 @@ describe('Organizations authentication', () => {
 
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile()
+    })
+      .overrideProvider(MANAGEMENT_API_CLIENT)
+      .useValue({ listOrganizations: vi.fn().mockResolvedValue(organizations) })
+      .compile()
 
     app = moduleRef.createNestApplication()
     configureHttpApplication(app, app.get<Environment>(APP_CONFIG))
@@ -84,7 +89,7 @@ describe('Organizations authentication', () => {
       .expect(401)
   })
 
-  it('uses the verified JWT subject as actor_sub', async () => {
+  it('uses the verified JWT subject to list its delegated organizations', async () => {
     const actorSub = '3e9a05c3-6544-44f7-a6ed-443c84f86f92'
     const token = signedUserToken(privateKey, actorSub)
 
@@ -92,7 +97,7 @@ describe('Organizations authentication', () => {
       .get('/v1/organizations')
       .set('Authorization', `Bearer ${token}`)
       .expect(200)
-      .expect({ actor_sub: actorSub })
+      .expect(organizations)
   })
 
   it('keeps health liveness public', async () => {

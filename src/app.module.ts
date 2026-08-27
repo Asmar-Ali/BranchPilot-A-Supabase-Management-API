@@ -4,7 +4,9 @@ import { HttpConventionsModule } from './common/http/http-conventions.module'
 import { AppConfigModule } from './config/config.module'
 import { DatabaseModule } from './database/database.module'
 import { HealthModule } from './health/health.module'
+import { OAuthModule } from './oauth/oauth.module'
 import { OrganizationsModule } from './organizations/organizations.module'
+import { ProjectsModule } from './projects/projects.module'
 
 @Module({
   imports: [
@@ -12,7 +14,9 @@ import { OrganizationsModule } from './organizations/organizations.module'
     HttpConventionsModule,
     DatabaseModule,
     HealthModule,
+    OAuthModule,
     OrganizationsModule,
+    ProjectsModule,
   ],
 })
 export class AppModule {}

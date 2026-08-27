@@ -37,6 +37,10 @@ export const APP_CONFIG = Symbol('APP_CONFIG')
           'SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI',
           { infer: true },
         ),
+        SUPABASE_MANAGEMENT_API_BASE_URL: configService.getOrThrow(
+          'SUPABASE_MANAGEMENT_API_BASE_URL',
+          { infer: true },
+        ),
         SUPABASE_URL: configService.getOrThrow('SUPABASE_URL', { infer: true }),
         SUPABASE_PUBLISHABLE_KEY: configService.getOrThrow('SUPABASE_PUBLISHABLE_KEY', {
           infer: true,

@@ -111,6 +111,11 @@ export const environmentSchema = z
     SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI: requiredString(
       'SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI',
     ).url({ error: 'SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI must be a valid URL' }),
+    SUPABASE_MANAGEMENT_API_BASE_URL: z
+      .string()
+      .trim()
+      .url({ error: 'SUPABASE_MANAGEMENT_API_BASE_URL must be a valid URL' })
+      .default('https://api.supabase.com'),
     SUPABASE_URL: requiredString('SUPABASE_URL').url({ error: 'SUPABASE_URL must be a valid URL' }),
     SUPABASE_PUBLISHABLE_KEY: requiredString('SUPABASE_PUBLISHABLE_KEY'),
     SUPABASE_SECRET_KEY: requiredString('SUPABASE_SECRET_KEY'),
