@@ -1,0 +1,6 @@
+dist
+node_modules
+coverage
+package-lock.json
+README.md
+IMPLEMENTATION_GUIDE.md
