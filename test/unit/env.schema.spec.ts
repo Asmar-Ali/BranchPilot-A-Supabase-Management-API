@@ -11,6 +11,8 @@ const validEnvironment = (): Record<string, string> => ({
   SUPABASE_MANAGEMENT_OAUTH_CLIENT_SECRET: 'client-secret',
   SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI: 'http://localhost:3000/v1/integrations/supabase/callback',
   SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key',
+  SUPABASE_SECRET_KEY: 'test-secret-key',
   SUPABASE_JWKS_URL: 'https://example.supabase.co/.well-known/jwks.json',
   CORS_ALLOWED_ORIGINS: 'http://localhost:3000,https://app.example.com',
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
@@ -114,6 +116,20 @@ describe('validateEnvironment', () => {
     expect(() => validateEnvironment(environment)).toThrow('SUPABASE_URL must be a valid URL')
   })
 
+  it('requires the server-only Supabase secret key', () => {
+    const environment = validEnvironment()
+    delete environment.SUPABASE_SECRET_KEY
+
+    expect(() => validateEnvironment(environment)).toThrow('SUPABASE_SECRET_KEY')
+  })
+
+  it('requires the Supabase publishable key', () => {
+    const environment = validEnvironment()
+    delete environment.SUPABASE_PUBLISHABLE_KEY
+
+    expect(() => validateEnvironment(environment)).toThrow('SUPABASE_PUBLISHABLE_KEY')
+  })
+
   it('rejects a NODE_ENV outside the allowed enum', () => {
     const environment = validEnvironment()
     environment.NODE_ENV = 'staging'
@@ -158,6 +174,15 @@ describe('validateEnvironment', () => {
 
     expect(() => validateEnvironment(environment)).toThrow(
       'CORS_ALLOWED_ORIGINS must contain only http(s) origins',
+    )
+  })
+
+  it('rejects CORS_ALLOWED_ORIGINS that contains only commas and whitespace', () => {
+    const environment = validEnvironment()
+    environment.CORS_ALLOWED_ORIGINS = ' , , '
+
+    expect(() => validateEnvironment(environment)).toThrow(
+      'CORS_ALLOWED_ORIGINS must contain at least one origin',
     )
   })
 })

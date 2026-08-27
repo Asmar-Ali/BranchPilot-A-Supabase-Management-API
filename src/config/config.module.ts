@@ -38,6 +38,10 @@ export const APP_CONFIG = Symbol('APP_CONFIG')
           { infer: true },
         ),
         SUPABASE_URL: configService.getOrThrow('SUPABASE_URL', { infer: true }),
+        SUPABASE_PUBLISHABLE_KEY: configService.getOrThrow('SUPABASE_PUBLISHABLE_KEY', {
+          infer: true,
+        }),
+        SUPABASE_SECRET_KEY: configService.getOrThrow('SUPABASE_SECRET_KEY', { infer: true }),
         SUPABASE_JWKS_URL: configService.get('SUPABASE_JWKS_URL', { infer: true }),
         SUPABASE_JWKS: configService.get('SUPABASE_JWKS', { infer: true }),
         CORS_ALLOWED_ORIGINS: configService.getOrThrow('CORS_ALLOWED_ORIGINS', { infer: true }),

@@ -26,9 +26,9 @@ BranchPilot is safe to route traffic to.
   case, but readiness must still reflect it defensively).
 - **Edge cases:** must not leak connection strings, credentials, or other secret-shaped
   values in the response body on failure.
-- **Tests:** to add once the database module lands —
-  `test/integration/health.readiness.spec.ts` against a real Postgres instance (both
-  reachable and intentionally unreachable), per `docs/testing-strategy.md`.
+- **Tests:** `test/unit/health.service.spec.ts` covers reachable and unreachable database
+  behavior. Add `test/integration/health.readiness.spec.ts` against real Postgres (both
+  reachable and intentionally unreachable) when the Docker daemon is available.
 
 ## Out of scope
 

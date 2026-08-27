@@ -103,6 +103,8 @@ SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI=http://localhost:3000/v1/integrations/sup
 
 # Used by @supabase/server to verify BranchPilot callers.
 SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
 SUPABASE_JWKS_URL=
 
 # Public browser origins only; comma-separated.
@@ -194,6 +196,10 @@ Use the NestJS adapter only on protected controller routes:
 Use `@SupabaseCtx('userClaims')` to obtain the caller's stable `sub` claim. The OAuth callback and health endpoints remain public because the callback identifies the initiating caller through a one-time stored OAuth state.
 
 The adapter places a verified `SupabaseContext` on the Nest request and provides the `SupabaseCtx` parameter decorator. [NestJS adapter](https://github.com/supabase/server/blob/main/docs/adapters/nestjs.md)
+
+`@supabase/server` constructs a user-scoped client and an admin client alongside the verified
+context, so `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` are also required. Keep the
+secret key server-side only.
 
 Pin a tested `@supabase/server` release at or newer than `1.4.1`, which includes the raw-Node NestJS adapter import fix. Add the import smoke test to CI. [Changelog](https://github.com/supabase/server/blob/main/CHANGELOG.md)
 

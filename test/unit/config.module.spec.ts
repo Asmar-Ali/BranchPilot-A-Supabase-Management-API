@@ -13,6 +13,8 @@ const validEnvironment = (): Record<string, string> => ({
   SUPABASE_MANAGEMENT_OAUTH_CLIENT_SECRET: 'client-secret',
   SUPABASE_MANAGEMENT_OAUTH_REDIRECT_URI: 'http://localhost:3000/v1/integrations/supabase/callback',
   SUPABASE_URL: 'https://example.supabase.co',
+  SUPABASE_PUBLISHABLE_KEY: 'test-publishable-key',
+  SUPABASE_SECRET_KEY: 'test-secret-key',
   SUPABASE_JWKS_URL: 'https://example.supabase.co/.well-known/jwks.json',
   CORS_ALLOWED_ORIGINS: 'http://localhost:3000,https://app.example.com',
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',

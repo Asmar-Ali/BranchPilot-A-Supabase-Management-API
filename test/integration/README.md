@@ -6,9 +6,10 @@ true external boundary (the live Supabase Management API) faked. See
 [`docs/testing-strategy.md`](../../docs/testing-strategy.md) for the full strategy and
 the per-module matrix of what belongs at this layer versus unit or e2e.
 
-This directory is currently empty: only `config/` and `health/` are implemented
-(Phase 1), and neither has Postgres/stub-dependent behavior yet. The first tests to land
-here will cover the `oauth/` module's connection persistence once Phase 2 starts.
+This directory is currently empty. The first test to land here is a PostgreSQL-backed
+`health.readiness.spec.ts` covering reachable and intentionally unreachable databases;
+it awaits a running local Docker daemon. OAuth connection-persistence coverage follows
+in Phase 2.
 
 Naming convention: `<module>.<behavior>.spec.ts`, e.g.
 `oauth-connection.refresh-persists-token-version.spec.ts`.

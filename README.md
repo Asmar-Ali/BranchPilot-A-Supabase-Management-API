@@ -268,6 +268,21 @@ Add a raw Node import smoke test for `@supabase/server/adapters/nestjs` and pin 
 
 ## Local development and CI
 
+### PostgreSQL
+
+Copy `.env.example` to `.env`, set the required OAuth and Supabase values, then start the
+local-only PostgreSQL container and apply the schema:
+
+```sh
+docker compose up -d postgres
+npm run db:migrate
+```
+
+The database is exposed only on `127.0.0.1:5432` and persists in the
+`branchpilot-postgres-data` Docker volume. `.env` (including any local database or OAuth
+credentials) is ignored by Git and must never be committed. Re-running `npm run db:migrate`
+is safe; it skips migrations that were already applied without modification.
+
 Docker Compose starts:
 
 - BranchPilot API
