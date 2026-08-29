@@ -268,15 +268,55 @@ Add a raw Node import smoke test for `@supabase/server/adapters/nestjs` and pin 
 
 ## Local development and CI
 
-### PostgreSQL
+### Running the project
 
-Copy `.env.example` to `.env`, set the required OAuth and Supabase values, then start the
-local-only PostgreSQL container and apply the schema:
+1. Copy the environment template and fill in the required values (at minimum
+   `TOKEN_ENCRYPTION_KEY_BASE64`, a base64-encoded 32-byte value; add the Supabase OAuth
+   and management values to exercise those flows):
+
+   ```sh
+   cp .env.example .env
+   ```
+
+2. Start PostgreSQL and Jaeger:
+
+   ```sh
+   docker compose up -d
+   ```
+
+3. Apply database migrations:
+
+   ```sh
+   npm run db:migrate
+   ```
+
+4. Start the dev server:
+
+   ```sh
+   npm run dev
+   ```
+
+   This watches `src/main.ts` with `tsx` and listens on `PORT` from `.env` (default
+   `3000`).
+
+Once running:
+
+- API: `http://localhost:3000`
+- Jaeger UI (traces): `http://localhost:16686`
+- Health check: `GET /health/live`
+
+Other useful commands:
 
 ```sh
-docker compose up -d postgres
-npm run db:migrate
+npm test                  # unit tests, no Docker required
+npm run test:integration  # requires Postgres running (step 2)
+npm run test:e2e          # requires Postgres running (step 2)
+npm run typecheck
+npm run lint
+npm run build
 ```
+
+### PostgreSQL
 
 The database is exposed only on `127.0.0.1:5432` and persists in the
 `branchpilot-postgres-data` Docker volume. `.env` (including any local database or OAuth

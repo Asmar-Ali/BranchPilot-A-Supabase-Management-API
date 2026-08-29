@@ -29,9 +29,8 @@ a test failure has an unambiguous answer to "is the test wrong or is the code wr
 ## Workflow
 
 Specs are updated as part of making a behavior change, not as a separate documentation
-pass afterward. The `feature-spec-and-tests` skill (`.claude/skills/feature-spec-and-tests/`)
-encodes this: spec update → test update → implementation, in that order, for every change
-that alters what the system does.
+pass afterward: spec update → test update → implementation, in that order, for every
+change that alters what the system does.
 
 See [`docs/specs/health.md`](./health.md) for a populated example, written against the
 module that's actually implemented today.
