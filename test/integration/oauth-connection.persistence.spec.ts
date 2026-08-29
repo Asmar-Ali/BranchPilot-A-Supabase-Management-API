@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type { Pool } from 'pg'
 
+import { DatabaseAuditService } from '../../src/audit/audit.service'
 import { DatabaseService } from '../../src/database/database.service'
 import { OAuthConnectionService } from '../../src/oauth/oauth-connection.service'
 import type { OAuthHttpClient, OAuthTokenSet } from '../../src/oauth/oauth.tokens'
@@ -44,11 +45,13 @@ async function connect(
 describe('OAuthConnectionService Postgres persistence', () => {
   let pool: Pool
   let database: DatabaseService
+  let audit: DatabaseAuditService
 
   beforeAll(async () => {
     pool = createTestDatabasePool()
     await migrateTestDatabase(pool)
     database = new DatabaseService(pool)
+    audit = new DatabaseAuditService(database)
   })
 
   afterEach(async () => {
@@ -60,7 +63,7 @@ describe('OAuthConnectionService Postgres persistence', () => {
   })
 
   it('persists only a state hash and encrypted PKCE verifier for ten minutes', async () => {
-    const service = new OAuthConnectionService(database, config as never, fakeOAuthHttp())
+    const service = new OAuthConnectionService(database, config as never, fakeOAuthHttp(), audit)
 
     await service.startAuthorization({ actorSub: 'user-1', organizationSlug: 'acme' })
 
@@ -84,7 +87,7 @@ describe('OAuthConnectionService Postgres persistence', () => {
 
   it('atomically consumes oauth state and rejects a replayed callback', async () => {
     const oauthHttp = fakeOAuthHttp()
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await connect(service, 'user-2')
     const replay = await pool.query<{
@@ -109,7 +112,7 @@ describe('OAuthConnectionService Postgres persistence', () => {
 
   it('increments token_version and clears revoked_at when a caller reconnects', async () => {
     const oauthHttp = fakeOAuthHttp()
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await connect(service, 'user-3', 'code-1')
     await pool.query(
@@ -141,7 +144,7 @@ describe('OAuthConnectionService Postgres persistence', () => {
         return { accessToken: 'new-access-token', expiresIn: 3600 } satisfies OAuthTokenSet
       }),
     })
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await connect(service, 'user-4')
 
@@ -153,7 +156,7 @@ describe('OAuthConnectionService Postgres persistence', () => {
 
   it('clears ciphertext and marks the connection revoked on disconnect', async () => {
     const oauthHttp = fakeOAuthHttp()
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await connect(service, 'user-5')
     await service.disconnect('user-5', randomUUID())
@@ -179,7 +182,7 @@ describe('OAuthConnectionService Postgres persistence', () => {
 
   it('writes an append-only audit event carrying the triggering correlation id', async () => {
     const correlationId = randomUUID()
-    const service = new OAuthConnectionService(database, config as never, fakeOAuthHttp())
+    const service = new OAuthConnectionService(database, config as never, fakeOAuthHttp(), audit)
 
     const { authorizationUrl } = await service.startAuthorization({ actorSub: 'user-6' })
     const state = new URL(authorizationUrl).searchParams.get('state')

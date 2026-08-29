@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer'
 import type { QueryResult, QueryResultRow } from 'pg'
 
+import type { AuditEvent, AuditService } from '../../src/audit/audit.tokens'
 import type { AppError } from '../../src/common/errors/app-error'
 import type { Database } from '../../src/database/database.service'
 import { OAuthConnectionService } from '../../src/oauth/oauth-connection.service'
@@ -13,6 +14,16 @@ function queryResult<Row extends QueryResultRow>(
   rowCount = rows.length,
 ): QueryResult<Row> {
   return { rowCount, rows } as unknown as QueryResult<Row>
+}
+
+function fakeAudit(): AuditService & { readonly events: AuditEvent[] } {
+  const events: AuditEvent[] = []
+  return {
+    events,
+    record: vi.fn(async (event: AuditEvent) => {
+      events.push(event)
+    }),
+  }
 }
 
 const config = {
@@ -45,7 +56,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     const result = await service.startAuthorization({
       actorSub: 'user-1',
@@ -64,7 +75,7 @@ describe('OAuthConnectionService', () => {
     )
   })
 
-  it('rejects expired or replayed state before exchanging a code', async () => {
+  it('rejects expired or replayed state before exchanging a code, and writes a security audit event', async () => {
     const database = {
       ping: vi.fn(),
       query: vi.fn().mockResolvedValue(queryResult([])),
@@ -75,12 +86,14 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const audit = fakeAudit()
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
+    const correlationId = crypto.randomUUID()
 
     await expect(
       service.completeAuthorization({
         code: 'code',
-        correlationId: crypto.randomUUID(),
+        correlationId,
         state: 'expired',
       }),
     ).rejects.toMatchObject({
@@ -88,6 +101,15 @@ describe('OAuthConnectionService', () => {
       status: 400,
     } satisfies Partial<AppError>)
     expect(oauthHttp.exchangeAuthorizationCode).not.toHaveBeenCalled()
+    expect(audit.events).toEqual([
+      {
+        actorSub: 'unknown',
+        action: 'oauth.state.invalid',
+        correlationId,
+        outcome: 'failure',
+        targetType: 'oauth_state',
+      },
+    ])
   })
 
   it('marks an invalid-grant refresh as revoked and requires reauthorization', async () => {
@@ -118,7 +140,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn().mockRejectedValue(new OAuthHttpError('invalid_grant', 400)),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await expect(service.getUsableAccessToken('user-1')).rejects.toMatchObject({
       code: 'SUPABASE_REAUTH_REQUIRED',
@@ -149,7 +171,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await expect(service.getUsableAccessToken('user-1')).resolves.toBe('cached-access-token')
     expect(oauthHttp.refreshAccessToken).not.toHaveBeenCalled()
@@ -166,7 +188,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await expect(service.getUsableAccessToken('user-1')).rejects.toMatchObject({
       code: 'SUPABASE_REAUTH_REQUIRED',
@@ -196,7 +218,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await expect(service.getUsableAccessToken('user-1')).rejects.toMatchObject({
       code: 'SUPABASE_REAUTH_REQUIRED',
@@ -232,7 +254,7 @@ describe('OAuthConnectionService', () => {
         .mockResolvedValue({ accessToken: 'refreshed-token', expiresIn: 3600 }),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     const [first, second] = await Promise.all([
       service.getUsableAccessToken('user-1', true),
@@ -271,7 +293,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn().mockResolvedValue({ accessToken: 'new-token', expiresIn: 3600 }),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await expect(service.getUsableAccessToken('user-1', true)).rejects.toMatchObject({
       code: 'SUPABASE_TOKEN_REFRESH_CONFLICT',
@@ -302,7 +324,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn().mockRejectedValue(new OAuthHttpError('server_error', 503)),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await expect(service.getUsableAccessToken('user-1', true)).rejects.toMatchObject({
       code: 'SUPABASE_TOKEN_REFRESH_FAILED',
@@ -338,7 +360,7 @@ describe('OAuthConnectionService', () => {
       }),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await service.getUsableAccessToken('user-1', true)
 
@@ -374,7 +396,7 @@ describe('OAuthConnectionService', () => {
         .mockResolvedValue({ accessToken: 'new-access-token', expiresIn: 3600 }),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await service.getUsableAccessToken('user-1', true)
 
@@ -405,7 +427,8 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const audit = fakeAudit()
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await service.completeAuthorization({ code: 'auth-code', correlationId: 'corr-1', state: 'state' })
 
@@ -417,10 +440,15 @@ describe('OAuthConnectionService', () => {
       .mocked(database.query)
       .mock.calls.find(([query]) => query.text.includes('INSERT INTO supabase_connections'))
     expect(insertCall).toBeDefined()
-    const auditCall = vi
-      .mocked(database.query)
-      .mock.calls.find(([query]) => query.text.includes('INSERT INTO audit_events'))
-    expect(auditCall?.[0].values).toEqual(['user-1', 'oauth.connection.created', 'success', 'corr-1'])
+    expect(audit.events).toEqual([
+      {
+        actorSub: 'user-1',
+        action: 'oauth.connection.created',
+        correlationId: 'corr-1',
+        outcome: 'success',
+        targetType: 'supabase_connection',
+      },
+    ])
   })
 
   it('does nothing when disconnecting a caller with no stored refresh token', async () => {
@@ -445,7 +473,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await service.disconnect('user-1', 'corr-1')
 
@@ -475,7 +503,7 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn(),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, fakeAudit())
 
     await service.disconnect('user-1', 'corr-1')
 
@@ -505,7 +533,8 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn().mockResolvedValue(undefined),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const audit = fakeAudit()
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await service.disconnect('user-1', 'corr-1')
 
@@ -514,10 +543,15 @@ describe('OAuthConnectionService', () => {
       .mocked(database.query)
       .mock.calls.find(([query]) => query.text.includes("status = 'revoked'"))
     expect(revokeUpdate).toBeDefined()
-    const auditCall = vi
-      .mocked(database.query)
-      .mock.calls.find(([query]) => query.text.includes('INSERT INTO audit_events'))
-    expect(auditCall?.[0].values).toEqual(['user-1', 'oauth.connection.revoked', 'success', 'corr-1'])
+    expect(audit.events).toEqual([
+      {
+        actorSub: 'user-1',
+        action: 'oauth.connection.revoked',
+        correlationId: 'corr-1',
+        outcome: 'success',
+        targetType: 'supabase_connection',
+      },
+    ])
   })
 
   it('marks revocation_pending and returns non-retryable on a permanent upstream revocation failure', async () => {
@@ -543,7 +577,8 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn().mockRejectedValue(new OAuthHttpError('invalid_grant', 400)),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const audit = fakeAudit()
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await expect(service.disconnect('user-1', 'corr-1')).rejects.toMatchObject({
       code: 'SUPABASE_REVOCATION_FAILED',
@@ -555,6 +590,16 @@ describe('OAuthConnectionService', () => {
       .mocked(database.query)
       .mock.calls.find(([query]) => query.text.includes('revocation_pending'))
     expect(pendingUpdate).toBeDefined()
+    expect(audit.events).toEqual([
+      {
+        actorSub: 'user-1',
+        action: 'oauth.connection.revocation_failed',
+        correlationId: 'corr-1',
+        outcome: 'failure',
+        targetType: 'supabase_connection',
+        upstreamStatus: 400,
+      },
+    ])
   })
 
   it('marks revocation_pending and returns retryable on a transient upstream revocation failure', async () => {
@@ -580,12 +625,22 @@ describe('OAuthConnectionService', () => {
       refreshAccessToken: vi.fn(),
       revokeAuthorization: vi.fn().mockRejectedValue(new TypeError('network error')),
     }
-    const service = new OAuthConnectionService(database, config as never, oauthHttp)
+    const audit = fakeAudit()
+    const service = new OAuthConnectionService(database, config as never, oauthHttp, audit)
 
     await expect(service.disconnect('user-1', 'corr-1')).rejects.toMatchObject({
       code: 'SUPABASE_REVOCATION_PENDING',
       retryable: true,
       status: 503,
     } satisfies Partial<AppError>)
+    expect(audit.events).toEqual([
+      {
+        actorSub: 'user-1',
+        action: 'oauth.connection.revocation_pending',
+        correlationId: 'corr-1',
+        outcome: 'failure',
+        targetType: 'supabase_connection',
+      },
+    ])
   })
 })

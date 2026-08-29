@@ -98,7 +98,7 @@ describe('Supabase OAuth connection lifecycle', () => {
     const response = await request(app.getHttpServer())
       .post('/v1/integrations/supabase/authorize')
       .set('Authorization', `Bearer ${token}`)
-      .expect(200)
+      .expect(201)
     const url = new URL(response.body.authorizationUrl as string)
     const state = url.searchParams.get('state')
     if (state === null) throw new Error('authorization URL is missing a state parameter')

@@ -1,12 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { randomUUID } from 'node:crypto'
 import type { QueryResultRow } from 'pg'
 
+import { AUDIT_SERVICE, type AuditService } from '../audit/audit.tokens'
 import { AppError } from '../common/errors/app-error'
 import { DATABASE } from '../database/database.tokens'
 import type { Database } from '../database/database.service'
 import { APP_CONFIG } from '../config/config.module'
 import type { Environment } from '../config/env.schema'
+import { withSpan } from '../observability/tracer'
 import { createOAuthState, createPkcePair, hashOAuthState } from './pkce'
 import { OAUTH_HTTP_CLIENT, type OAuthHttpClient, type OAuthTokenSet } from './oauth.tokens'
 import { OAuthHttpError } from './supabase-oauth-http.client'
@@ -37,6 +38,7 @@ export class OAuthConnectionService {
     @Inject(DATABASE) private readonly database: Database,
     @Inject(APP_CONFIG) private readonly config: Environment,
     @Inject(OAUTH_HTTP_CLIENT) private readonly oauthHttp: OAuthHttpClient,
+    @Inject(AUDIT_SERVICE) private readonly audit: AuditService,
   ) {
     this.cipher = new TokenCipher(config.TOKEN_ENCRYPTION_KEY_BASE64)
   }
@@ -74,20 +76,23 @@ export class OAuthConnectionService {
     readonly correlationId: string
     readonly state: string
   }): Promise<void> {
-    const transaction = await this.consumeTransaction(input.state)
-    const verifier = this.cipher.decrypt(transaction.code_verifier_ciphertext)
-    const tokens = await this.oauthHttp.exchangeAuthorizationCode({
-      code: input.code,
-      codeVerifier: verifier,
-    })
+    return withSpan('oauth.authorization_code_exchange', async () => {
+      const transaction = await this.consumeTransaction(input.state, input.correlationId)
+      const verifier = this.cipher.decrypt(transaction.code_verifier_ciphertext)
+      const tokens = await this.oauthHttp.exchangeAuthorizationCode({
+        code: input.code,
+        codeVerifier: verifier,
+      })
 
-    await this.saveConnectedTokens(transaction.actor_sub, tokens)
-    await this.writeAuditEvent(
-      transaction.actor_sub,
-      'oauth.connection.created',
-      'success',
-      input.correlationId,
-    )
+      await this.saveConnectedTokens(transaction.actor_sub, tokens)
+      await this.audit.record({
+        actorSub: transaction.actor_sub,
+        action: 'oauth.connection.created',
+        correlationId: input.correlationId,
+        outcome: 'success',
+        targetType: 'supabase_connection',
+      })
+    })
   }
 
   public async getUsableAccessToken(actorSub: string, forceRefresh = false): Promise<string> {
@@ -128,6 +133,14 @@ export class OAuthConnectionService {
       })
 
       if (error instanceof OAuthHttpError && error.status >= 400 && error.status < 500) {
+        await this.audit.record({
+          actorSub,
+          action: 'oauth.connection.revocation_failed',
+          correlationId,
+          outcome: 'failure',
+          targetType: 'supabase_connection',
+          upstreamStatus: error.status,
+        })
         throw new AppError({
           code: 'SUPABASE_REVOCATION_FAILED',
           retryable: false,
@@ -137,6 +150,13 @@ export class OAuthConnectionService {
         })
       }
 
+      await this.audit.record({
+        actorSub,
+        action: 'oauth.connection.revocation_pending',
+        correlationId,
+        outcome: 'failure',
+        targetType: 'supabase_connection',
+      })
       throw new AppError({
         code: 'SUPABASE_REVOCATION_PENDING',
         retryable: true,
@@ -153,7 +173,13 @@ export class OAuthConnectionService {
              WHERE actor_sub = $1`,
       values: [actorSub],
     })
-    await this.writeAuditEvent(actorSub, 'oauth.connection.revoked', 'success', correlationId)
+    await this.audit.record({
+      actorSub,
+      action: 'oauth.connection.revoked',
+      correlationId,
+      outcome: 'success',
+      targetType: 'supabase_connection',
+    })
   }
 
   private authorizationUrl(input: {
@@ -164,7 +190,10 @@ export class OAuthConnectionService {
     return this.oauthHttp.createAuthorizationUrl(input)
   }
 
-  private async consumeTransaction(state: string): Promise<OAuthTransactionRow> {
+  private async consumeTransaction(
+    state: string,
+    correlationId: string,
+  ): Promise<OAuthTransactionRow> {
     const result = await this.database.query<OAuthTransactionRow>({
       text: `UPDATE oauth_transactions
              SET consumed_at = now()
@@ -174,6 +203,13 @@ export class OAuthConnectionService {
     })
     const transaction = result.rows[0]
     if (transaction === undefined) {
+      await this.audit.record({
+        actorSub: 'unknown',
+        action: 'oauth.state.invalid',
+        correlationId,
+        outcome: 'failure',
+        targetType: 'oauth_state',
+      })
       throw new AppError({
         code: 'OAUTH_STATE_INVALID',
         retryable: false,
@@ -209,6 +245,10 @@ export class OAuthConnectionService {
   }
 
   private async performRefresh(connection: ConnectionRow): Promise<string> {
+    return withSpan('oauth.token_refresh', () => this.doPerformRefresh(connection))
+  }
+
+  private async doPerformRefresh(connection: ConnectionRow): Promise<string> {
     if (connection.refresh_token_ciphertext === null) throw this.reauthorizationRequired()
 
     let tokens: OAuthTokenSet
@@ -285,19 +325,6 @@ export class OAuthConnectionService {
         this.cipher.encrypt(tokens.refreshToken),
         new Date(Date.now() + tokens.expiresIn * 1000),
       ],
-    })
-  }
-
-  private async writeAuditEvent(
-    actorSub: string,
-    action: string,
-    outcome: 'success',
-    correlationId: string,
-  ): Promise<void> {
-    await this.database.query({
-      text: `INSERT INTO audit_events (actor_sub, action, target_type, outcome, correlation_id)
-             VALUES ($1, $2, 'supabase_connection', $3, $4)`,
-      values: [actorSub, action, outcome, correlationId || randomUUID()],
     })
   }
 
